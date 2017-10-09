@@ -7,6 +7,8 @@ https://github.com/dingusdk/PythonIhcSdk
 
 # How to use it
 
+Place the files in the homeassistant configuration folder (the folder that contains your configuration yaml file) - so you have the "custom_components" folder as a sub folder to your HA configuration folder.
+
 See the post on my blog for further description:
 
 http://www.dingus.dk/home-assistant-ihc-integration/
