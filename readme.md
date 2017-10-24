@@ -1,8 +1,10 @@
 # Introduction
 
-This implement support for IHC in Home Assistant. To use this you need to install the python ihc sdk from here:
+This implement support for IHC in Home Assistant. The soap interfacing to IHC is done in this library
 
 https://github.com/dingusdk/PythonIhcSdk
+
+It should be installed automatically by home assistant from the PyPi.
 
 
 # How to use it
