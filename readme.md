@@ -9,11 +9,39 @@ It should be installed automatically by home assistant from the PyPi.
 
 # How to use it
 
-Place the files in the homeassistant configuration folder (the folder that contains your configuration yaml file) - so you have the "custom_components" folder as a sub folder to your HA configuration folder.
 
-See the post on my blog for further description:
+**Option 1**
+
+Download the git repository manually and copy the custom_components to the homeassistant configuration folder (the folder that contains your configuration yaml file) - so you have the "custom_components" folder as a sub folder to your HA configuration folder.
+
+**Option 2** (for linux)
+
+If you want to be able to get updates easier using git, it may be a good idea to keep the clone of the git repository in a separate folder, and then make a link to the custom_components folder.
+Assuming you have a homeassistant user to run HA do like this:
+
+```bash
+cd ~
+git clone https://github.com/dingusdk/haihc
+```
+You will now have a clone of the repository in a haihc folder in your home folder.
+Now make the link the the custom_components folder
+```bash
+cd .homeassistant
+ln -s /home/homeassistant/haihc/custom_components custom_components
+```
+later when you want to get updates from git do:
+```bash
+cd ~/haihc
+git fetch
+```
+
+**Configuration**
+
+See the post on my blog for further description about how to configure it:
 
 http://www.dingus.dk/home-assistant-ihc-integration/
+
+
 
 # License
 
