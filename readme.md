@@ -32,7 +32,7 @@ ln -s /home/homeassistant/haihc/custom_components custom_components
 later when you want to get updates from git do:
 ```bash
 cd ~/haihc
-git fetch
+git pull
 ```
 
 **Configuration**
