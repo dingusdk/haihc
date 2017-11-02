@@ -4,7 +4,7 @@ import time
 from homeassistant.helpers.discovery import load_platform
 
 DOMAIN = 'ihc'
-REQUIREMENTS = [ 'ihcsdk==1.0.2']
+REQUIREMENTS = [ 'ihcsdk==1.0.3']
 
 _LOGGER = logging.getLogger(__name__)
 
