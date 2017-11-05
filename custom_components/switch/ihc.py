@@ -1,71 +1,91 @@
 """
 IHC switch platform that implements a switch.
 """
+# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument
 import logging
-import threading
 import time
 import xml.etree.ElementTree
-from homeassistant.components.switch import SwitchDevice
-from homeassistant.const import DEVICE_DEFAULT_NAME
+import voluptuous as vol
+import homeassistant.helpers.config_validation as cv
+from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
+
+DEPENDENCIES = ['ihc']
+
+IHCDATA = 'ihc'
+
+CONF_AUTOSETUP = 'autosetup'
+CONF_IDS = 'ids'
+
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
+    vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
+    vol.Optional(CONF_IDS): vol.Schema(vol.Required({cv.string: cv.string}))
+})
+
+PRODUCTAUTOSETUP = [
+    # Wireless Plug outlet
+    {'xpath': './/product_airlink[@product_identifier="_0x4201"]',
+     'node': 'airlink_relay'},
+    # Dataline universal relay
+    {'xpath': './/product_airlink[@product_identifier="_0x4203"]',
+     'node': 'airlink_relay'},
+    # Dataline plug outlet
+    {'xpath': './/product_dataline[@product_identifier="_0x2201"]',
+     'node': 'dataline_output'},
+    ]
+
 
 _LOGGER = logging.getLogger(__name__)
 
-ihcswitches = {}
+_IHCSWITCHES = {}
 
 def setup_platform(hass, config, add_devices_callback, discovery_info=None):
-    
-    while not 'ihc' in hass.data:
-        time.sleep( 0.1)
-    ihccontroller = hass.data[ 'ihc']
+    """Setup the ihc switch platform."""
+    while not IHCDATA in hass.data:
+        time.sleep(0.1)
+    ihccontroller = hass.data[IHCDATA]
 
     devices = []
-    if config.get( 'autosetup'):
-        _LOGGER.info("Auto setup for IHC light")
-        project = ihccontroller.GetProject()
-        xdoc = xml.etree.ElementTree.fromstring( project)
-        groups = xdoc.findall( r'.//group')
-        for group in groups:
-            groupname = group.attrib['name']
-            switches = group.findall( './/product_airlink[@product_identifier="_0x4201"]')
-            for product in switches :
-                id = int( product.find( "airlink_relay").attrib['id'].strip( '_'),0)
-                name = groupname + "_" + str(id) 
-                AddSwitchFromNode( devices,ihccontroller,id,name,product)
-            # universal relæ
-            switches = group.findall( './/product_airlink[@product_identifier="_0x4203"]')
-            for product in switches :
-                id = int( product.find( "airlink_relay").attrib['id'].strip( '_'),0)
-                name = groupname + "_" + str(id) 
-                AddSwitchFromNode( devices,ihccontroller,id,name,product)
-            # dataline stikkontakt
-            switches = group.findall( './/product_dataline[@product_identifier="_0x2201"]')
-            for product in switches :
-                id = int( product.find( "dataline_output").attrib['id'].strip( '_'),0)
-                name = groupname + "_" + str(id) 
-                AddSwitchFromNode( devices,ihccontroller,id,name,product)
+    if config.get(CONF_AUTOSETUP):
+        auto_setup(ihccontroller, devices)
 
-    ids = config.get( 'ids')
+    ids = config.get(CONF_IDS)
     if ids != None:
         _LOGGER.info("Adding IHC Switches")
-        for id in ids:
-            name = ids[id]
-            AddSwitch( devices,ihccontroller,id,name,True)
+        for ihcid in ids:
+            name = ids[ihcid]
+            add_switch(devices, ihccontroller, int(ihcid), name, True)
 
-    add_devices_callback( devices)
+    add_devices_callback(devices)
     # Start notification after device har been added
     for device in devices:
-        device.ihc.AddNotifyEvent( device.ihcid,device.IhcChange)
+        device.ihc.AddNotifyEvent(device.get_ihcid(), device.on_ihc_change)
+
+def auto_setup(ihccontroller, devices):
+    """Auto setup switched from the ihc project file."""
+    _LOGGER.info("Auto setup for IHC light")
+    project = ihccontroller.GetProject()
+    xdoc = xml.etree.ElementTree.fromstring(project)
+    groups = xdoc.findall(r'.//group')
+    for group in groups:
+        groupname = group.attrib['name']
+        for productcfg in PRODUCTAUTOSETUP:
+            products = group.findall(productcfg['xpath'])
+            for product in products:
+                node = product.find(productcfg['node'])
+                ihcid = int(node.attrib['id'].strip('_'), 0)
+                name = groupname + "_" + str(ihcid)
+                add_switch_from_node(devices, ihccontroller, ihcid, name, product)
 
 
 class IHCSwitch(SwitchDevice):
-
-    def __init__(self, ihccontroller,name, id,ihcname,ihcnote):
-        self._name = name or DEVICE_DEFAULT_NAME
-        self._state =  False
+    """IHC Switch."""
+    def __init__(self, ihccontroller, name, ihcid, ihcname, ihcnote):
+        self._name = name
+        self._state = False
         self._icon = None
         self._assumed = False
 
-        self.ihcid = id
+        self._ihcid = ihcid
         self.ihc = ihccontroller
         self.ihcname = ihcname
         self.ihcnote = ihcnote
@@ -106,9 +126,10 @@ class IHCSwitch(SwitchDevice):
     @property
     def device_state_attributes(self):
         """Return the state attributes."""
-        if not self.ihc.info: return {}
+        if not self.ihc.info:
+            return {}
         return {
-            '_ihcid': self.ihcid,
+            'ihcid': self._ihcid,
             'ihcname' : self.ihcname,
             'ihcnote' : self.ihcnote
         }
@@ -116,38 +137,49 @@ class IHCSwitch(SwitchDevice):
     def turn_on(self, **kwargs):
         """Turn the switch on."""
         self._state = True
-        self.ihc.SetRuntimeValueBool( self.ihcid,True)
+        self.ihc.SetRuntimeValueBool(self._ihcid, True)
         self.schedule_update_ha_state()
 
     def turn_off(self, **kwargs):
         """Turn the device off."""
         self._state = False
-        self.ihc.SetRuntimeValueBool( self.ihcid,False)
+        self.ihc.SetRuntimeValueBool(self._ihcid, False)
         self.schedule_update_ha_state()
 
-    def IhcChange( self,id,v):
+    def get_ihcid(self) -> int:
+        """Return the ihc resource id."""
+        return self._ihcid
+
+    def set_name(self, name):
+        """Set the name"""
+        self._name = name
+
+    def on_ihc_change(self, ihcid, value):
+        """Callback when the ihc resource changes."""
         try:
-            self._state = v
+            self._state = value
             self.schedule_update_ha_state()
         except:
             pass
 
 
-def AddSwitchFromNode( devices,ihccontroller,id : int,name:str,product) -> IHCSwitch:
+def add_switch_from_node(devices, ihccontroller, ihcid: int, name: str, product) -> IHCSwitch:
+    """Add a IHC switch form the a product in the project."""
     ihcname = product.attrib['name']
     ihcnote = product.attrib['note']
-    return AddSwitch( devices,ihccontroller,id,name,False,ihcname,ihcnote)
+    return add_switch(devices, ihccontroller, ihcid, name, False, ihcname, ihcnote)
 
-def AddSwitch( devices,ihccontroller,id : int,name: str,overwrite :bool= False,ihcname:str = "", ihcnote:str="") -> IHCSwitch:
-    if id in ihcswitches:
-        switch = ihcswitches[ id]
-        if overwrite: 
-            switch._name = name
-            _LOGGER.info("IHC switch set name: " + name + " " + str(id))
+def add_switch(devices, ihccontroller, ihcid: int, name: str, overwrite: bool = False,
+               ihcname: str = "", ihcnote: str = "") -> IHCSwitch:
+    """Add a new ihc switch"""
+    if ihcid in _IHCSWITCHES:
+        switch = _IHCSWITCHES[ihcid]
+        if overwrite:
+            switch.set_name(name)
+            _LOGGER.info("IHC switch set name: " + name + " " + str(ihcid))
     else:
-        switch = IHCSwitch( ihccontroller,name,id,ihcname,ihcnote)
-        ihcswitches[ id] = switch
-        devices.append( switch)
-        _LOGGER.info("IHC switch added: " + name + " " + str(id))
+        switch = IHCSwitch(ihccontroller, name, ihcid, ihcname, ihcnote)
+        _IHCSWITCHES[ihcid] = switch
+        devices.append(switch)
+        _LOGGER.info("IHC switch added: " + name + " " + str(ihcid))
     return switch
-

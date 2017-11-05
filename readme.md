@@ -37,7 +37,11 @@ git pull
 
 **Configuration**
 
-See the post on my blog for further description about how to configure it:
+See the Wiki here at github and my original blog post:
+
+https://github.com/dingusdk/haihc/wiki/Configuration
+
+and
 
 http://www.dingus.dk/home-assistant-ihc-integration/
 
