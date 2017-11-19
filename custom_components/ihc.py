@@ -12,7 +12,6 @@ from homeassistant.const import CONF_URL, CONF_USERNAME, CONF_PASSWORD
 REQUIREMENTS = ['ihcsdk==2.0.1']
 
 DOMAIN = 'ihc'
-IHCDATA = 'ihc'
 
 CONF_INFO = 'info'
 
@@ -60,7 +59,7 @@ def setup(hass, config):
         """Set a IHC runtime float value service function """
         ihcid = int(call.data.get('ihcid', 0))
         value = float(call.data.get('value', 0))
-        ihc.client.set_runtime_value_float(ihcid, value)
+        ihc.set_runtime_value_float(ihcid, value)
 
     hass.services.register(DOMAIN, 'set_runtime_value_bool', set_runtime_value_bool)
     hass.services.register(DOMAIN, 'set_runtime_value_int', set_runtime_value_int)
@@ -70,9 +69,9 @@ def setup(hass, config):
 
 def get_ihc_instance(hass):
     """Get the ihc instance from the hass configuration"""
-    while not IHCDATA in hass.data:
+    while not DOMAIN in hass.data:
         time.sleep(0.1)
-    return hass.data[IHCDATA]
+    return hass.data[DOMAIN]
 
 
 class IHCDevice:
