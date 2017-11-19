@@ -3,17 +3,15 @@ IHC sensor platform.
 """
 # pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument
 import logging
-import time
 import xml.etree.ElementTree
 import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
 from homeassistant.const import CONF_NAME, CONF_TYPE, CONF_UNIT_OF_MEASUREMENT
+from ..ihc import IHCDevice, get_ihc_instance
 
 DEPENDENCIES = ['ihc']
-
-IHCDATA = 'ihc'
 
 CONF_AUTOSETUP = 'autosetup'
 CONF_IDS = 'ids'
@@ -63,10 +61,7 @@ _IHCSENSORS = {}
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the ihc sensor platform"""
-    while not IHCDATA in hass.data:
-        time.sleep(0.1)
-    ihccontroller = hass.data[IHCDATA]
-
+    ihccontroller = get_ihc_instance(hass)
     devices = []
     if config.get('autosetup'):
         auto_setup(ihccontroller, devices)
@@ -90,12 +85,12 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     add_devices(devices)
     # Start notification after devices has been added
     for sensor in devices:
-        sensor.ihc.AddNotifyEvent(sensor.ihcid, sensor.on_ihc_change)
+        sensor.ihc.add_notify_event(sensor.get_ihcid(), sensor.on_ihc_change)
 
 def auto_setup(ihccontroller, devices):
     """Setup ihc sensors from the ihc project file."""
     _LOGGER.info("Auto setup for IHC sensor")
-    project = ihccontroller.GetProject()
+    project = ihccontroller.get_project()
     xdoc = xml.etree.ElementTree.fromstring(project)
     groups = xdoc.findall(r'.//group')
     for group in groups:
@@ -113,44 +108,22 @@ def auto_setup(ihccontroller, devices):
                                productcfg['sensortype'],
                                productcfg['unit_of_measurement'],
                                False, product.attrib['name'],
-                               product.attrib['note'])
+                               product.attrib['note'], product.attrib['position'])
 
-class IHCSensor(Entity):
+class IHCSensor(IHCDevice, Entity):
     """Implementation of the IHC sensor."""
-    def __init__(self, ihccontroller, name, ihcid, sensortype, unit, ihcname, ihcnote):
-        self._name = name
+    def __init__(self, ihccontroller, name, ihcid, sensortype, unit, ihcname, ihcnote, ihcposition):
+        IHCDevice.__init__(self, ihccontroller, name, ihcid, ihcname, ihcnote, ihcposition)
         self._state = None
         self._icon = None
         self._assumed = False
-
-        self.ihcid = ihcid
-        self.ihc = ihccontroller
-        self.ihcname = ihcname
-        self.ihcnote = ihcnote
-
         self.type = sensortype
         self._unit_of_measurement = unit
-
-    @property
-    def name(self):
-        """Return the name of the sensor."""
-        return self._name
 
     @property
     def state(self):
         """Return the state of the sensor."""
         return self._state
-
-    @property
-    def device_state_attributes(self):
-        """Return the state attributes."""
-        if not self.ihc.info:
-            return {}
-        return {
-            '_ihcid': self.ihcid,
-            'ihcname' : self.ihcname,
-            'ihcnote' : self.ihcnote
-        }
 
     @property
     def unit_of_measurement(self):
@@ -159,10 +132,6 @@ class IHCSensor(Entity):
 
     def update(self):
         pass
-
-    def set_name(self, name):
-        """Set the name."""
-        self._name = name
 
     def set_unit(self, unit):
         """Set unit of measusement"""
@@ -178,7 +147,7 @@ class IHCSensor(Entity):
 
 def add_sensor(devices, ihccontroller, ihcid: int, name: str, sensortype: str,
                unit: str, overwrite: bool = False,
-               ihcname: str = "", ihcnote: str = "") -> IHCSensor:
+               ihcname: str = "", ihcnote: str = "", ihcposition: str = "") -> IHCSensor:
     """Add a new ihc sensor"""
     if ihcid in _IHCSENSORS:
         sensor = _IHCSENSORS[ihcid]
@@ -188,7 +157,8 @@ def add_sensor(devices, ihccontroller, ihcid: int, name: str, sensortype: str,
             sensor.set_unit(unit)
             _LOGGER.info("IHC sensor set name: " + name + " " + str(ihcid))
     else:
-        sensor = IHCSensor(ihccontroller, name, ihcid, sensortype, unit, ihcname, ihcnote)
+        sensor = IHCSensor(ihccontroller, name, ihcid, sensortype, unit,
+                           ihcname, ihcnote, ihcposition)
         sensor.type = sensortype
         _IHCSENSORS[ihcid] = sensor
         devices.append(sensor)

@@ -3,15 +3,13 @@ IHC switch platform that implements a switch.
 """
 # pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument
 import logging
-import time
 import xml.etree.ElementTree
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
+from ..ihc import IHCDevice, get_ihc_instance
 
 DEPENDENCIES = ['ihc']
-
-IHCDATA = 'ihc'
 
 CONF_AUTOSETUP = 'autosetup'
 CONF_IDS = 'ids'
@@ -40,10 +38,7 @@ _IHCSWITCHES = {}
 
 def setup_platform(hass, config, add_devices_callback, discovery_info=None):
     """Setup the ihc switch platform."""
-    while not IHCDATA in hass.data:
-        time.sleep(0.1)
-    ihccontroller = hass.data[IHCDATA]
-
+    ihccontroller = get_ihc_instance(hass)
     devices = []
     if config.get(CONF_AUTOSETUP):
         auto_setup(ihccontroller, devices)
@@ -58,12 +53,12 @@ def setup_platform(hass, config, add_devices_callback, discovery_info=None):
     add_devices_callback(devices)
     # Start notification after device har been added
     for device in devices:
-        device.ihc.AddNotifyEvent(device.get_ihcid(), device.on_ihc_change)
+        device.ihc.add_notify_event(device.get_ihcid(), device.on_ihc_change)
 
 def auto_setup(ihccontroller, devices):
     """Auto setup switched from the ihc project file."""
     _LOGGER.info("Auto setup for IHC light")
-    project = ihccontroller.GetProject()
+    project = ihccontroller.get_project()
     xdoc = xml.etree.ElementTree.fromstring(project)
     groups = xdoc.findall(r'.//group')
     for group in groups:
@@ -77,26 +72,18 @@ def auto_setup(ihccontroller, devices):
                 add_switch_from_node(devices, ihccontroller, ihcid, name, product)
 
 
-class IHCSwitch(SwitchDevice):
+class IHCSwitch(IHCDevice, SwitchDevice):
     """IHC Switch."""
-    def __init__(self, ihccontroller, name, ihcid, ihcname, ihcnote):
-        self._name = name
+    def __init__(self, ihccontroller, name: str, ihcid: int,
+                 ihcname: str, ihcnote: str, ihcposition: str):
+        IHCDevice.__init__(self, ihccontroller, name, ihcid, ihcname, ihcnote, ihcposition)
         self._state = False
         self._icon = None
         self._assumed = False
 
-        self._ihcid = ihcid
-        self.ihc = ihccontroller
-        self.ihcname = ihcname
-        self.ihcnote = ihcnote
-
     @property
     def should_poll(self):
         return False
-
-    @property
-    def name(self):
-        return self._name
 
     @property
     def icon(self):
@@ -123,36 +110,17 @@ class IHCSwitch(SwitchDevice):
         """Return true if switch is on."""
         return self._state
 
-    @property
-    def device_state_attributes(self):
-        """Return the state attributes."""
-        if not self.ihc.info:
-            return {}
-        return {
-            'ihcid': self._ihcid,
-            'ihcname' : self.ihcname,
-            'ihcnote' : self.ihcnote
-        }
-
     def turn_on(self, **kwargs):
         """Turn the switch on."""
         self._state = True
-        self.ihc.SetRuntimeValueBool(self._ihcid, True)
+        self.ihc.set_runtime_value_bool(self._ihcid, True)
         self.schedule_update_ha_state()
 
     def turn_off(self, **kwargs):
         """Turn the device off."""
         self._state = False
-        self.ihc.SetRuntimeValueBool(self._ihcid, False)
+        self.ihc.set_runtime_value_bool(self._ihcid, False)
         self.schedule_update_ha_state()
-
-    def get_ihcid(self) -> int:
-        """Return the ihc resource id."""
-        return self._ihcid
-
-    def set_name(self, name):
-        """Set the name"""
-        self._name = name
 
     def on_ihc_change(self, ihcid, value):
         """Callback when the ihc resource changes."""
@@ -167,10 +135,11 @@ def add_switch_from_node(devices, ihccontroller, ihcid: int, name: str, product)
     """Add a IHC switch form the a product in the project."""
     ihcname = product.attrib['name']
     ihcnote = product.attrib['note']
-    return add_switch(devices, ihccontroller, ihcid, name, False, ihcname, ihcnote)
+    ihcposition = product.attrib['position']
+    return add_switch(devices, ihccontroller, ihcid, name, False, ihcname, ihcnote, ihcposition)
 
 def add_switch(devices, ihccontroller, ihcid: int, name: str, overwrite: bool = False,
-               ihcname: str = "", ihcnote: str = "") -> IHCSwitch:
+               ihcname: str = "", ihcnote: str = "", ihcposition: str = "") -> IHCSwitch:
     """Add a new ihc switch"""
     if ihcid in _IHCSWITCHES:
         switch = _IHCSWITCHES[ihcid]
@@ -178,7 +147,7 @@ def add_switch(devices, ihccontroller, ihcid: int, name: str, overwrite: bool = 
             switch.set_name(name)
             _LOGGER.info("IHC switch set name: " + name + " " + str(ihcid))
     else:
-        switch = IHCSwitch(ihccontroller, name, ihcid, ihcname, ihcnote)
+        switch = IHCSwitch(ihccontroller, name, ihcid, ihcname, ihcnote, ihcposition)
         _IHCSWITCHES[ihcid] = switch
         devices.append(switch)
         _LOGGER.info("IHC switch added: " + name + " " + str(ihcid))
