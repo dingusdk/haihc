@@ -41,7 +41,7 @@ See the Wiki here at github and my original blog post:
 
 https://github.com/dingusdk/haihc/wiki/Configuration
 
-and
+and my original blog post
 
 http://www.dingus.dk/home-assistant-ihc-integration/
 
