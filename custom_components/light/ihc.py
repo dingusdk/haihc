@@ -138,9 +138,9 @@ class IhcLight(IHCDevice, Light):
         self._state = False
 
         if self._dimmable:
-            self.ihc.set_runtime_value_bool(self._ihcid, 0)
+            self.ihc.set_runtime_value_int(self._ihcid, 0)
         else:
-            self.ihc.set_runtime_value_int(self._ihcid, False)
+            self.ihc.set_runtime_value_bool(self._ihcid, False)
         # As we have disabled polling, we need to inform
         # Home Assistant about updates in our state ourselves.
         self.schedule_update_ha_state()
