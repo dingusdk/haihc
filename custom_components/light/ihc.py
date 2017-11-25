@@ -8,13 +8,12 @@ from homeassistant.components.light import (
     ATTR_BRIGHTNESS, SUPPORT_BRIGHTNESS, PLATFORM_SCHEMA, Light)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.const import STATE_UNKNOWN
+
+from ..ihc.const import *
 from ..ihc import get_ihc_platform
 from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
-
-CONF_AUTOSETUP = 'autosetup'
-CONF_IDS = 'ids'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,

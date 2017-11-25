@@ -8,13 +8,12 @@ from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
 from homeassistant.const import CONF_NAME, CONF_TYPE, CONF_UNIT_OF_MEASUREMENT
+
+from ..ihc.const import *
 from ..ihc import get_ihc_platform
 from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
-
-CONF_AUTOSETUP = 'autosetup'
-CONF_IDS = 'ids'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_AUTOSETUP, default='False') : cv.boolean,

@@ -6,13 +6,12 @@ import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
+
+from ..ihc.const import *
 from ..ihc import get_ihc_platform
 from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
-
-CONF_AUTOSETUP = 'autosetup'
-CONF_IDS = 'ids'
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
