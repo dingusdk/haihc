@@ -1,15 +1,15 @@
 """
 IHC binary sensor platform.
 """
-# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except
+# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, missing-docstring
 import logging
-import xml.etree.ElementTree
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.binary_sensor import (
     BinarySensorDevice, PLATFORM_SCHEMA, DEVICE_CLASSES_SCHEMA)
 from homeassistant.const import STATE_UNKNOWN, CONF_NAME, CONF_TYPE
-from ..ihc import IHCDevice, get_ihc_instance
+from ..ihc import get_ihc_platform
+from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
 
@@ -72,10 +72,10 @@ _IHCBINARYSENSORS = {}
 # pylint: disable=unused-argument
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Set up the IHC binary setsor platform."""
-    ihccontroller = get_ihc_instance(hass)
+    ihcplatform = get_ihc_platform(hass)
     devices = []
     if config.get(CONF_AUTOSETUP):
-        auto_setup(ihccontroller, devices)
+        auto_setup(ihcplatform, devices)
 
     ids = config.get(CONF_IDS)
     if ids != None:
@@ -85,30 +85,22 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
             name = data[CONF_NAME]
             sensortype = sensortype = data[CONF_TYPE] if CONF_TYPE in data else None
             inverting = data[CONF_INVERTING] if CONF_INVERTING in data else False
-            add_sensor(devices, ihccontroller, int(ihcid), name, sensortype, True, inverting)
+            add_sensor(devices, ihcplatform.ihc, int(ihcid), name, sensortype, True, inverting)
 
     add_devices(devices)
     # Start notification after devices has been added
     for device in devices:
-        device.ihc.add_notify_event(device.get_ihcid(), device.on_ihc_change)
+        device.ihc.add_notify_event(device.get_ihcid(), device.on_ihc_change, True)
 
-def auto_setup(ihccontroller, devices):
+def auto_setup(ihcplatform, devices):
     """auto setup ihc binary sensors from ihc project."""
     _LOGGER.info("Auto setup - IHC Binary sensors")
-    project = ihccontroller.get_project()
-    xdoc = xml.etree.ElementTree.fromstring(project)
-    groups = xdoc.findall(r'.//group')
-    for group in groups:
-        groupname = group.attrib['name']
-        for productcfg in PRODUCTAUTOSETUP:
-            products = group.findall(productcfg['xpath'])
-            for product in products:
-                node = product.find(productcfg['node'])
-                ihcid = int(node.attrib['id'].strip('_'), 0)
-                name = groupname + "_" + str(ihcid)
-                add_sensor_from_node(devices, ihccontroller, ihcid, name,
-                                     product, productcfg['type'],
-                                     productcfg['inverting'])
+    def setup_product(ihcid, name, product, productcfg):
+        add_sensor_from_node(devices, ihcplatform.ihc, ihcid, name,
+                             product, productcfg['type'],
+                             productcfg['inverting'])
+    ihcplatform.autosetup(PRODUCTAUTOSETUP, setup_product)
+
 
 class IHCBinarySensor(IHCDevice, BinarySensorDevice):
     """IHC Binary Sensor."""

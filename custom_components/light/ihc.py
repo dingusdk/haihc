@@ -1,15 +1,15 @@
 """
 IHC light platform.
 """
-# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument
+# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument, missing-docstring
 import logging
-import xml.etree.ElementTree
 import voluptuous as vol
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS, SUPPORT_BRIGHTNESS, PLATFORM_SCHEMA, Light)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.const import STATE_UNKNOWN
-from ..ihc import IHCDevice, get_ihc_instance
+from ..ihc import get_ihc_platform
+from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
 
@@ -46,39 +46,30 @@ _IHCLIGHTS = {}
 
 def setup_platform(hass, config, add_devices_callback, discovery_info=None):
     """Setup the ihc lights platform"""
-    ihccontroller = get_ihc_instance(hass)
+    ihcplatform = get_ihc_platform(hass)
     devices = []
     if config.get(CONF_AUTOSETUP):
-        auto_setup(ihccontroller, devices)
+        auto_setup(ihcplatform, devices)
 
     ids = config.get(CONF_IDS)
     if ids != None:
         _LOGGER.info("Adding/Changing IHC light names")
         for ihcid in ids:
             name = ids[ihcid]
-            add_light(devices, ihccontroller, int(ihcid), name, True)
+            add_light(devices, ihcplatform.ihc, int(ihcid), name, True)
 
     add_devices_callback(devices)
-    # Start notification after device har been added
+    # Start notification after device has been added
     for device in devices:
-        device.ihc.add_notify_event(device.get_ihcid(), device.on_ihc_change)
+        device.ihc.add_notify_event(device.get_ihcid(), device.on_ihc_change, True)
 
 
-def auto_setup(ihccontroller, devices):
+def auto_setup(ihcplatform, devices):
     """Auto setup ihc light product from ihc project """
     _LOGGER.info("Auto setup for IHC light")
-    project = ihccontroller.get_project()
-    xdoc = xml.etree.ElementTree.fromstring(project)
-    groups = xdoc.findall(r'.//group')
-    for group in groups:
-        groupname = group.attrib['name']
-        for productcfg in PRODUCTAUTOSETUP:
-            products = group.findall(productcfg['xpath'])
-            for product in products:
-                node = product.find(productcfg['node'])
-                ihcid = int(node.attrib['id'].strip('_'), 0)
-                name = groupname + "_" + str(ihcid)
-                add_light_from_node(devices, ihccontroller, ihcid, name, product)
+    def setup_product(ihcid, name, product, productcfg):
+        add_light_from_node(devices, ihcplatform.ihc, ihcid, name, product)
+    ihcplatform.autosetup(PRODUCTAUTOSETUP, setup_product)
 
 class IhcLight(IHCDevice, Light):
     """Representation of a IHC light."""

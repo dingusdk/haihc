@@ -1,15 +1,15 @@
 """
 IHC sensor platform.
 """
-# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument
+# pylint: disable=too-many-arguments, too-many-instance-attributes, bare-except, unused-argument, missing-docstring
 import logging
-import xml.etree.ElementTree
 import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
 from homeassistant.const import CONF_NAME, CONF_TYPE, CONF_UNIT_OF_MEASUREMENT
-from ..ihc import IHCDevice, get_ihc_instance
+from ..ihc import get_ihc_platform
+from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
 
@@ -61,10 +61,10 @@ _IHCSENSORS = {}
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the ihc sensor platform"""
-    ihccontroller = get_ihc_instance(hass)
+    ihcplatform = get_ihc_platform(hass)
     devices = []
     if config.get('autosetup'):
-        auto_setup(ihccontroller, devices)
+        auto_setup(ihcplatform, devices)
 
     ids = config.get('ids')
     if ids != None:
@@ -80,35 +80,23 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
                 sensortype = data[CONF_TYPE]
             if CONF_UNIT_OF_MEASUREMENT in data:
                 unit = data[CONF_UNIT_OF_MEASUREMENT]
-            add_sensor(devices, ihccontroller, int(ihcid), name, sensortype, unit, True)
+            add_sensor(devices, ihcplatform.ihc, int(ihcid), name, sensortype, unit, True)
 
     add_devices(devices)
     # Start notification after devices has been added
     for sensor in devices:
-        sensor.ihc.add_notify_event(sensor.get_ihcid(), sensor.on_ihc_change)
+        sensor.ihc.add_notify_event(sensor.get_ihcid(), sensor.on_ihc_change, True)
 
-def auto_setup(ihccontroller, devices):
+def auto_setup(ihcplatform, devices):
     """Setup ihc sensors from the ihc project file."""
     _LOGGER.info("Auto setup for IHC sensor")
-    project = ihccontroller.get_project()
-    xdoc = xml.etree.ElementTree.fromstring(project)
-    groups = xdoc.findall(r'.//group')
-    for group in groups:
-        groupname = group.attrib['name']
-        for productcfg in PRODUCTAUTOSETUP:
-            products = group.findall(productcfg['xpath'])
-            for product in products:
-                nodes = product.findall(productcfg['node'])
-                for node in nodes:
-                    if 'setting' in node.attrib and node.attrib['setting'] == 'yes':
-                        continue
-                    ihcid = int(node.attrib['id'].strip('_'), 0)
-                    name = groupname + "_" + str(ihcid)
-                    add_sensor(devices, ihccontroller, ihcid, name,
-                               productcfg['sensortype'],
-                               productcfg['unit_of_measurement'],
-                               False, product.attrib['name'],
-                               product.attrib['note'], product.attrib['position'])
+    def setup_product(ihcid, name, product, productcfg):
+        add_sensor(devices, ihcplatform.ihc, ihcid, name,
+                   productcfg['sensortype'], productcfg['unit_of_measurement'],
+                   False, product.attrib['name'], product.attrib['note'],
+                   product.attrib['position'])
+    ihcplatform.autosetup(PRODUCTAUTOSETUP, setup_product)
+
 
 class IHCSensor(IHCDevice, Entity):
     """Implementation of the IHC sensor."""
