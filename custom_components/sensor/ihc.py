@@ -7,7 +7,8 @@ import voluptuous as vol
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
-from homeassistant.const import CONF_NAME, CONF_TYPE, CONF_UNIT_OF_MEASUREMENT
+from homeassistant.const import (CONF_ID, CONF_NAME, CONF_TYPE,
+    CONF_UNIT_OF_MEASUREMENT, CONF_SENSORS)
 
 from ..ihc.const import *
 from ..ihc import get_ihc_platform
@@ -16,14 +17,14 @@ from ..ihc.ihcdevice import IHCDevice
 DEPENDENCIES = ['ihc']
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_AUTOSETUP, default='False') : cv.boolean,
-    vol.Optional(CONF_IDS) : {
-        cv.string: vol.All({
-            vol.Required(CONF_NAME): cv.string,
+    vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
+    vol.Optional(CONF_SENSORS) :
+        [{
+            vol.Required(CONF_ID): cv.positive_int,
+            vol.Optional(CONF_NAME): cv.string,
             vol.Optional(CONF_TYPE): cv.string,
             vol.Optional(CONF_UNIT_OF_MEASUREMENT): cv.string
-        })
-    }
+        }]
 })
 
 PRODUCTAUTOSETUP = [
@@ -65,20 +66,14 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     if config.get('autosetup'):
         auto_setup(ihcplatform, devices)
 
-    ids = config.get('ids')
-    if ids != None:
+    sensors = config.get(CONF_SENSORS)
+    if sensors != None:
         _LOGGER.info("Adding IHC Sensor")
-        for ihcid in ids:
-            data = ids[ihcid]
-            sensortype = "Temperature"
-            unit = "°C"
-            name = data
-            if CONF_NAME in data:
-                name = data[CONF_NAME]
-            if CONF_TYPE in data:
-                sensortype = data[CONF_TYPE]
-            if CONF_UNIT_OF_MEASUREMENT in data:
-                unit = data[CONF_UNIT_OF_MEASUREMENT]
+        for sensor in sensors:
+            ihcid = sensor[CONF_ID]
+            name = sensor[CONF_NAME] if CONF_NAME in sensor else "ihc_" + str(ihcid)
+            sensortype = sensor[CONF_TYPE] if CONF_TYPE in sensor else "Temperature"
+            unit = sensor[CONF_UNIT_OF_MEASUREMENT] if CONF_UNIT_OF_MEASUREMENT in sensor else "°C"
             add_sensor(devices, ihcplatform.ihc, int(ihcid), name, sensortype, unit, True)
 
     add_devices(devices)

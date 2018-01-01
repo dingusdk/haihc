@@ -6,6 +6,7 @@ import logging
 import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.switch import (SwitchDevice, PLATFORM_SCHEMA)
+from homeassistant.const import CONF_ID, CONF_NAME, CONF_SWITCHES
 
 from ..ihc.const import *
 from ..ihc import get_ihc_platform
@@ -15,7 +16,11 @@ DEPENDENCIES = ['ihc']
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
-    vol.Optional(CONF_IDS): vol.Schema(vol.Required({cv.string: cv.string}))
+    vol.Optional(CONF_SWITCHES) :
+        [{
+            vol.Required(CONF_ID): cv.positive_int,
+            vol.Optional(CONF_NAME): cv.string,
+        }]
 })
 
 PRODUCTAUTOSETUP = [
@@ -42,11 +47,12 @@ def setup_platform(hass, config, add_devices_callback, discovery_info=None):
     if config.get('autosetup'):
         auto_setup(ihcplatform, devices)
 
-    ids = config.get(CONF_IDS)
-    if ids != None:
+    switches = config.get(CONF_SWITCHES)
+    if switches:
         _LOGGER.info("Adding IHC Switches")
-        for ihcid in ids:
-            name = ids[ihcid]
+        for switch in switches:
+            ihcid = switch[CONF_ID]
+            name = switch[CONF_NAME] if CONF_NAME in switch else "ihc_" + str(ihcid)
             add_switch(devices, ihcplatform.ihc, int(ihcid), name, True)
 
     add_devices_callback(devices)

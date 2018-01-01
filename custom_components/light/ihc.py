@@ -7,7 +7,7 @@ import voluptuous as vol
 from homeassistant.components.light import (
     ATTR_BRIGHTNESS, SUPPORT_BRIGHTNESS, PLATFORM_SCHEMA, Light)
 import homeassistant.helpers.config_validation as cv
-from homeassistant.const import STATE_UNKNOWN
+from homeassistant.const import STATE_UNKNOWN, CONF_ID, CONF_NAME, CONF_LIGHTS
 
 from ..ihc.const import *
 from ..ihc import get_ihc_platform
@@ -17,7 +17,11 @@ DEPENDENCIES = ['ihc']
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
-    vol.Optional(CONF_IDS): vol.Schema(vol.Required({cv.string: cv.string}))
+    vol.Optional(CONF_LIGHTS) :
+        [{
+            vol.Required(CONF_ID): cv.positive_int,
+            vol.Optional(CONF_NAME): cv.string,
+        }]
 })
 
 PRODUCTAUTOSETUP = [
@@ -50,11 +54,12 @@ def setup_platform(hass, config, add_devices_callback, discovery_info=None):
     if config.get(CONF_AUTOSETUP):
         auto_setup(ihcplatform, devices)
 
-    ids = config.get(CONF_IDS)
-    if ids != None:
+    lights = config.get(CONF_LIGHTS)
+    if lights:
         _LOGGER.info("Adding/Changing IHC light names")
-        for ihcid in ids:
-            name = ids[ihcid]
+        for light in lights:
+            ihcid = light[CONF_ID]
+            name = light[CONF_NAME] if CONF_NAME in light else "ihc_" + str(ihcid)
             add_light(devices, ihcplatform.ihc, int(ihcid), name, True)
 
     add_devices_callback(devices)

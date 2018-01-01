@@ -7,7 +7,7 @@ import voluptuous as vol
 import homeassistant.helpers.config_validation as cv
 from homeassistant.components.binary_sensor import (
     BinarySensorDevice, PLATFORM_SCHEMA, DEVICE_CLASSES_SCHEMA)
-from homeassistant.const import STATE_UNKNOWN, CONF_NAME, CONF_TYPE
+from homeassistant.const import STATE_UNKNOWN, CONF_NAME, CONF_TYPE, CONF_ID, CONF_BINARY_SENSORS
 
 from ..ihc.const import *
 from ..ihc import get_ihc_platform
@@ -16,15 +16,16 @@ from ..ihc.ihcdevice import IHCDevice
 DEPENDENCIES = ['ihc']
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_AUTOSETUP, default='False') : cv.boolean,
-    vol.Optional(CONF_IDS) : {
-        cv.string: vol.All({
-            vol.Required(CONF_NAME): cv.string,
+    vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
+    vol.Optional(CONF_BINARY_SENSORS) :
+        [{
+            vol.Required(CONF_ID): cv.positive_int,
+            vol.Optional(CONF_NAME): cv.string,
             vol.Optional(CONF_TYPE): DEVICE_CLASSES_SCHEMA,
             vol.Optional(CONF_INVERTING): cv.boolean,
-        })
-    }
+        }]
 })
+
 
 PRODUCTAUTOSETUP = [
     # Magnet contact
@@ -75,14 +76,14 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     if config.get(CONF_AUTOSETUP):
         auto_setup(ihcplatform, devices)
 
-    ids = config.get(CONF_IDS)
-    if ids != None:
+    binarysensors = config.get(CONF_BINARY_SENSORS)
+    if binarysensors:
         _LOGGER.info("Adding IHC Binary Sensors")
-        for ihcid in ids:
-            data = ids[ihcid]
-            name = data[CONF_NAME]
-            sensortype = sensortype = data[CONF_TYPE] if CONF_TYPE in data else None
-            inverting = data[CONF_INVERTING] if CONF_INVERTING in data else False
+        for binarysensor in binarysensors:
+            ihcid = binarysensor[CONF_ID]
+            name = binarysensor[CONF_NAME] if CONF_NAME in binarysensor else "ihc_" + str(ihcid)
+            sensortype = binarysensor[CONF_TYPE] if CONF_TYPE in binarysensor else None
+            inverting = binarysensor[CONF_INVERTING] if CONF_INVERTING in binarysensor else False
             add_sensor(devices, ihcplatform.ihc, int(ihcid), name, sensortype, True, inverting)
 
     add_devices(devices)
