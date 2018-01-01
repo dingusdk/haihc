@@ -25,19 +25,22 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 PRODUCTAUTOSETUP = [
-    #Wireless Combi dimmer 4 buttons
+    # Wireless Combi dimmer 4 buttons
     {'xpath': './/product_airlink[@product_identifier="_0x4406"]',
      'node': 'airlink_dimming'},
-    #Wireless Lampeudtag dimmer
+    # Wireless Lamp outlet dimmer
     {'xpath': './/product_airlink[@product_identifier="_0x4304"]',
      'node': 'airlink_dimming'},
-    #Wireless Lampeudtag relay
+    # Wireless universal dimmer
+    {'xpath': './/product_airlink[@product_identifier="_0x4306"]',
+     'node': 'airlink_dimming'},
+    # Wireless Lamp outlet relay
     {'xpath': './/product_airlink[@product_identifier="_0x4202"]',
      'node': 'airlink_relay'},
-    #Wireless Combi relay 4 buttons
+    # Wireless Combi relay 4 buttons
     {'xpath': './/product_airlink[@product_identifier="_0x4404"]',
      'node': 'airlink_relay'},
-    # dataline lampeudtag
+    # Dataline Lamp outlet
     {'xpath': './/product_dataline[@product_identifier="_0x2202"]',
      'node': 'dataline_output'},
 ]
