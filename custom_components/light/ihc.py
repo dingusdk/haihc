@@ -29,7 +29,7 @@ PRODUCTAUTOSETUP = [
     {'xpath': './/product_airlink[@product_identifier="_0x4406"]',
      'node': 'airlink_dimming'},
     #Wireless Lampeudtag dimmer
-    {'xpath': './/product_airlink[@product_identifier="_0x4306"]',
+    {'xpath': './/product_airlink[@product_identifier="_0x4304"]',
      'node': 'airlink_dimming'},
     #Wireless Lampeudtag relay
     {'xpath': './/product_airlink[@product_identifier="_0x4202"]',
