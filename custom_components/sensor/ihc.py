@@ -4,28 +4,30 @@ For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/sensor.ihc/
 """
 from xml.etree.ElementTree import Element
+
 import voluptuous as vol
 
-from ..ihc.const import CONF_AUTOSETUP
-from ..ihc import validate_name, IHC_DATA
-from ..ihc.ihcdevice import IHCDevice
 from homeassistant.components.sensor import PLATFORM_SCHEMA
 from homeassistant.const import (
-    CONF_ID, CONF_NAME, CONF_TYPE, CONF_UNIT_OF_MEASUREMENT, CONF_SENSORS)
+    CONF_ID, CONF_NAME, CONF_UNIT_OF_MEASUREMENT, CONF_SENSORS,
+    TEMP_CELSIUS)
 import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity import Entity
+
+from ..ihc import (
+    validate_name, IHC_DATA, IHC_CONTROLLER)
+from ..ihc.ihcdevice import IHCDevice
 
 DEPENDENCIES = ['ihc']
 
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_AUTOSETUP, default='False'): cv.boolean,
     vol.Optional(CONF_SENSORS, default=[]):
         vol.All(cv.ensure_list, [
             vol.All({
                 vol.Required(CONF_ID): cv.positive_int,
                 vol.Optional(CONF_NAME): cv.string,
-                vol.Optional(CONF_TYPE, default='Temperature'): cv.string,
-                vol.Optional(CONF_UNIT_OF_MEASUREMENT, default='°C'): cv.string
+                vol.Optional(CONF_UNIT_OF_MEASUREMENT,
+                             default=TEMP_CELSIUS): cv.string
             }, validate_name)
         ])
 })
@@ -33,26 +35,25 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the ihc sensor platform."""
-    ihc = hass.data[IHC_DATA]
+    ihc_controller = hass.data[IHC_DATA][IHC_CONTROLLER]
     devices = []
-    if config.get(CONF_AUTOSETUP):
-        def setup_product(ihc_id, name, product, product_cfg):
-            """Product setup callback."""
-            sensor = IHCSensor(ihc, name, ihc_id,
-                               product_cfg[CONF_TYPE],
+    if discovery_info:
+        for name, device in discovery_info.items():
+            ihc_id = device['ihc_id']
+            product_cfg = device['product_cfg']
+            product = device['product']
+            sensor = IHCSensor(ihc_controller, name, ihc_id,
                                product_cfg[CONF_UNIT_OF_MEASUREMENT],
                                product)
             devices.append(sensor)
-        ihc.auto_setup('sensor', setup_product)
-
-    sensors = config.get(CONF_SENSORS)
-    for sensor_cfg in sensors:
-        ihc_id = sensor_cfg[CONF_ID]
-        name = sensor_cfg[CONF_NAME]
-        sensor_type = sensor_cfg[CONF_TYPE]
-        unit = sensor_cfg[CONF_UNIT_OF_MEASUREMENT]
-        sensor = IHCSensor(ihc, name, ihc_id, sensor_type, unit)
-        devices.append(sensor)
+    else:
+        sensors = config[CONF_SENSORS]
+        for sensor_cfg in sensors:
+            ihc_id = sensor_cfg[CONF_ID]
+            name = sensor_cfg[CONF_NAME]
+            unit = sensor_cfg[CONF_UNIT_OF_MEASUREMENT]
+            sensor = IHCSensor(ihc_controller, name, ihc_id, unit)
+            devices.append(sensor)
 
     add_devices(devices)
 
@@ -60,14 +61,11 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
 class IHCSensor(IHCDevice, Entity):
     """Implementation of the IHC sensor."""
 
-    def __init__(self, ihc, name, ihc_id, sensortype, unit,
-                 product: Element = None):
+    def __init__(self, ihc_controller, name, ihc_id, unit,
+                 product: Element=None):
         """Initialize the IHC sensor."""
-        super().__init__(ihc, name, ihc_id, product)
+        super().__init__(ihc_controller, name, ihc_id, product)
         self._state = None
-        self._icon = None
-        self._assumed = False
-        self.type = sensortype
         self._unit_of_measurement = unit
 
     @property
@@ -79,10 +77,6 @@ class IHCSensor(IHCDevice, Entity):
     def unit_of_measurement(self):
         """Return the unit of measurement of this entity, if any."""
         return self._unit_of_measurement
-
-    def set_unit(self, unit):
-        """Set unit of measusement."""
-        self._unit_of_measurement = unit
 
     def on_ihc_change(self, ihc_id, value):
         """Callback when ihc resource changes."""

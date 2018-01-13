@@ -9,31 +9,36 @@ import xml.etree.ElementTree
 import voluptuous as vol
 from voluptuous.error import Error as VoluptuousError
 
-import homeassistant.helpers.config_validation as cv
-from ..ihc.const import (
-    ATTR_IHC_ID, ATTR_VALUE, CONF_INFO,
-    CONF_BINARY_SENSOR, CONF_LIGHT, CONF_SENSOR, CONF_SWITCH,
-    CONF_XPATH, CONF_NODE,
-    CONF_DIMMABLE, CONF_INVERTING)
 from homeassistant.config import load_yaml_config_file
 from homeassistant.const import (
     CONF_URL, CONF_USERNAME, CONF_PASSWORD, CONF_ID, CONF_NAME,
     CONF_UNIT_OF_MEASUREMENT, CONF_TYPE)
+from homeassistant.helpers import discovery
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.typing import HomeAssistantType
 
-REQUIREMENTS = ['ihcsdk==2.1.0']
+from .const import (
+    ATTR_IHC_ID, ATTR_VALUE, CONF_INFO, CONF_AUTOSETUP,
+    CONF_BINARY_SENSOR, CONF_LIGHT, CONF_SENSOR, CONF_SWITCH,
+    CONF_XPATH, CONF_NODE, CONF_DIMMABLE, CONF_INVERTING,
+    SERVICE_SET_RUNTIME_VALUE_BOOL, SERVICE_SET_RUNTIME_VALUE_INT,
+    SERVICE_SET_RUNTIME_VALUE_FLOAT)
+
+REQUIREMENTS = ['ihcsdk==2.1.1']
+
 DOMAIN = 'ihc'
 IHC_DATA = 'ihc'
-
+IHC_CONTROLLER = 'controller'
+IHC_INFO = 'info'
 AUTO_SETUP_YAML = 'ihc_auto_setup.yaml'
-
 
 CONFIG_SCHEMA = vol.Schema({
     DOMAIN: vol.Schema({
         vol.Required(CONF_URL): cv.string,
         vol.Required(CONF_USERNAME): cv.string,
         vol.Required(CONF_PASSWORD): cv.string,
-        vol.Required(CONF_INFO): cv.boolean
+        vol.Optional(CONF_AUTOSETUP, default=True): cv.boolean,
+        vol.Optional(CONF_INFO, default=True): cv.boolean
     }),
 }, extra=vol.ALLOW_EXTRA)
 
@@ -86,111 +91,123 @@ SET_RUNTIME_VALUE_INT_SCHEMA = vol.Schema({
 
 SET_RUNTIME_VALUE_FLOAT_SCHEMA = vol.Schema({
     vol.Required(ATTR_IHC_ID): cv.positive_int,
-    vol.Required(ATTR_VALUE): float
+    vol.Required(ATTR_VALUE): vol.Coerce(float)
 })
 
 _LOGGER = logging.getLogger(__name__)
 
+IHC_PLATFORMS = ('binary_sensor', 'light', 'sensor', 'switch')
+
 
 def setup(hass, config):
-    """Setyp the IHC component."""
+    """Setup the IHC component."""
     from ihcsdk.ihccontroller import IHCController
     conf = config[DOMAIN]
-    url = conf.get(CONF_URL)
-    username = conf.get(CONF_USERNAME)
-    password = conf.get(CONF_PASSWORD)
+    url = conf[CONF_URL]
+    username = conf[CONF_USERNAME]
+    password = conf[CONF_PASSWORD]
     ihc_controller = IHCController(url, username, password)
 
     if not ihc_controller.authenticate():
         _LOGGER.error("Unable to authenticate on ihc controller.")
         return False
 
-    ihc = Ihc(hass, ihc_controller)
-    ihc.info = conf.get(CONF_INFO)
-    hass.data[IHC_DATA] = ihc
+    if (conf[CONF_AUTOSETUP] and
+            not autosetup_ihc_products(hass, ihc_controller)):
+        return False
 
-    # Service functions
+    hass.data[IHC_DATA] = {
+        IHC_CONTROLLER: ihc_controller,
+        IHC_INFO: conf[CONF_INFO]}
 
+    setup_service_functions(hass, ihc_controller)
+    return True
+
+
+def autosetup_ihc_products(hass: HomeAssistantType, ihc_controller):
+    """Auto setup of IHC products from the ihc project file."""
+    project_xml = ihc_controller.get_project()
+    if not project_xml:
+        _LOGGER.error("Unable to read project from ihc controller.")
+        return False
+    project = xml.etree.ElementTree.fromstring(project_xml)
+
+    # if an auto setup file exist in the configuration it will override
+    yaml_path = hass.config.path(AUTO_SETUP_YAML)
+    if not os.path.isfile(yaml_path):
+        yaml_path = os.path.join(os.path.dirname(__file__), AUTO_SETUP_YAML)
+    yaml = load_yaml_config_file(yaml_path)
+    try:
+        auto_setup_conf = AUTO_SETUP_SCHEMA(yaml)
+    except VoluptuousError as exception:
+        _LOGGER.error("Invalid IHC auto setup data: %s", exception)
+        return False
+    groups = project.findall('.//group')
+    for component in IHC_PLATFORMS:
+        component_setup = auto_setup_conf[component]
+        discovery_info = get_discovery_info(component_setup, groups)
+        discovery.load_platform(hass, component, DOMAIN, discovery_info)
+    return True
+
+
+def get_discovery_info(component_setup, groups):
+    """Get discover info for specified component."""
+    discovery_data = {}
+    for group in groups:
+        groupname = group.attrib['name']
+        for product_cfg in component_setup:
+            products = group.findall(product_cfg[CONF_XPATH])
+            for product in products:
+                nodes = product.findall(product_cfg[CONF_NODE])
+                for node in nodes:
+                    if ('setting' in node.attrib
+                            and node.attrib['setting'] == 'yes'):
+                        continue
+                    ihc_id = int(node.attrib['id'].strip('_'), 0)
+                    name = '{}_{}'.format(groupname, ihc_id)
+                    device = {
+                        'ihc_id': ihc_id,
+                        'product': product,
+                        'product_cfg': product_cfg}
+                    discovery_data[name] = device
+    return discovery_data
+
+
+def setup_service_functions(hass: HomeAssistantType, ihc_controller):
+    """Setup the ihc service functions."""
     def set_runtime_value_bool(call):
         """Set a IHC runtime bool value service function."""
-        ihc_id = int(call.data.get(ATTR_IHC_ID, 0))
-        value = bool(call.data.get(ATTR_VALUE, 0))
+        ihc_id = call.data[ATTR_IHC_ID]
+        value = call.data[ATTR_VALUE]
         ihc_controller.set_runtime_value_bool(ihc_id, value)
 
     def set_runtime_value_int(call):
         """Set a IHC runtime integer value service function."""
-        ihcid = int(call.data.get(ATTR_IHC_ID, 0))
-        value = int(call.data.get(ATTR_VALUE, 0))
-        ihc_controller.set_runtime_value_int(ihcid, value)
+        ihc_id = call.data[ATTR_IHC_ID]
+        value = call.data[ATTR_VALUE]
+        ihc_controller.set_runtime_value_int(ihc_id, value)
 
     def set_runtime_value_float(call):
         """Set a IHC runtime float value service function."""
-        ihcid = int(call.data.get(ATTR_IHC_ID, 0))
-        value = float(call.data.get(ATTR_VALUE, 0))
-        ihc_controller.set_runtime_value_float(ihcid, value)
+        ihc_id = call.data[ATTR_IHC_ID]
+        value = call.data[ATTR_VALUE]
+        ihc_controller.set_runtime_value_float(ihc_id, value)
 
     descriptions = load_yaml_config_file(
         os.path.join(os.path.dirname(__file__), 'services.yaml'))
 
-    hass.services.register(DOMAIN, const.SERVICE_SET_RUNTIME_VALUE_BOOL,
+    hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_BOOL,
                            set_runtime_value_bool,
-                           descriptions[const.SERVICE_SET_RUNTIME_VALUE_BOOL],
+                           descriptions[SERVICE_SET_RUNTIME_VALUE_BOOL],
                            schema=SET_RUNTIME_VALUE_BOOL_SCHEMA)
-    hass.services.register(DOMAIN, const.SERVICE_SET_RUNTIME_VALUE_INT,
+    hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_INT,
                            set_runtime_value_int,
-                           descriptions[const.SERVICE_SET_RUNTIME_VALUE_INT],
+                           descriptions[SERVICE_SET_RUNTIME_VALUE_INT],
                            schema=SET_RUNTIME_VALUE_INT_SCHEMA)
-    hass.services.register(DOMAIN, const.SERVICE_SET_RUNTIME_VALUE_FLOAT,
+    hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_FLOAT,
                            set_runtime_value_float,
-                           descriptions[const.SERVICE_SET_RUNTIME_VALUE_FLOAT],
+                           descriptions[SERVICE_SET_RUNTIME_VALUE_FLOAT],
                            schema=SET_RUNTIME_VALUE_FLOAT_SCHEMA)
-    return True
-
-
-class Ihc:
-    """Wraps the IHCController for caching of ihc project and autosetup."""
-
-    def __init__(self, hass: HomeAssistantType, ihc_controller):
-        """Initialize the caching of the project."""
-        self.ihc_controller = ihc_controller
-        self.info = False
-        project = self.ihc_controller.get_project()
-        if not project:
-            _LOGGER.error("Unable to read project from ihc controller.")
-            return
-        self.project = xml.etree.ElementTree.fromstring(project)
-        # We will cache the groups for faster autosetup
-        self._groups = self.project.findall(r'.//group')
-        # if a auto setup file exist in the configuration it will override
-        yaml_path = hass.config.path(AUTO_SETUP_YAML)
-        if not os.path.isfile(yaml_path):
-            yaml_path = os.path.join(os.path.dirname(__file__),
-                                     AUTO_SETUP_YAML)
-        yaml = load_yaml_config_file(yaml_path)
-        try:
-            self.product_auto_setup = AUTO_SETUP_SCHEMA(yaml)
-        except VoluptuousError as exception:
-            _LOGGER.error("Invalid IHC auto setup data: %s", exception)
-            self.product_auto_setup = None
-
-    def auto_setup(self, component, setup_product):
-        """Do autosetup of a component from the IHC project."""
-        if not self.product_auto_setup:
-            return
-        component_setup = self.product_auto_setup[component]
-        for group in self._groups:
-            groupname = group.attrib['name']
-            for product_cfg in component_setup:
-                products = group.findall(product_cfg['xpath'])
-                for product in products:
-                    nodes = product.findall(product_cfg['node'])
-                    for node in nodes:
-                        if ('setting' in node.attrib
-                                and node.attrib['setting'] == 'yes'):
-                            continue
-                        ihc_id = int(node.attrib['id'].strip('_'), 0)
-                        name = groupname + "_" + str(ihc_id)
-                        setup_product(ihc_id, name, product, product_cfg)
 
 
 def validate_name(config):
