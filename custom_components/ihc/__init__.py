@@ -194,20 +194,14 @@ def setup_service_functions(hass: HomeAssistantType, ihc_controller):
         value = call.data[ATTR_VALUE]
         ihc_controller.set_runtime_value_float(ihc_id, value)
 
-    descriptions = load_yaml_config_file(
-        os.path.join(os.path.dirname(__file__), 'services.yaml'))
-
     hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_BOOL,
                            set_runtime_value_bool,
-                           descriptions[SERVICE_SET_RUNTIME_VALUE_BOOL],
                            schema=SET_RUNTIME_VALUE_BOOL_SCHEMA)
     hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_INT,
                            set_runtime_value_int,
-                           descriptions[SERVICE_SET_RUNTIME_VALUE_INT],
                            schema=SET_RUNTIME_VALUE_INT_SCHEMA)
     hass.services.register(DOMAIN, SERVICE_SET_RUNTIME_VALUE_FLOAT,
                            set_runtime_value_float,
-                           descriptions[SERVICE_SET_RUNTIME_VALUE_FLOAT],
                            schema=SET_RUNTIME_VALUE_FLOAT_SCHEMA)
 
 
