@@ -1,3 +1,14 @@
+# READ FIRST
+
+From version 0.62 of home assistant the IHC integration is part of the official home assistant.
+
+If you have previously been using haihc as a custom component yous should delete it from your comfiguration, otherwise the build in version may not work.
+
+**This also mean I will no longer been maintaining haihc**
+
+[Read here about IHC in home assistant](https://home-assistant.io/components/ihc/)
+
+
 # Introduction
 
 This implement support for IHC in Home Assistant. The soap interfacing to IHC is done in this library
